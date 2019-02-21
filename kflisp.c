@@ -61,7 +61,7 @@ void print_lval(lval v) {
     break;
   case LVAL_ERR:
     if (v.err == LERR_DIV_ZERO) {
-      printf("Error: Division By Zero!");
+      printf("Error: Division/Modulo By Zero!");
     } else if (v.err == LERR_BAD_OP) {
       printf("Error: Invalid Operator!");
     } else if (v.err == LERR_BAD_NUM) {
@@ -74,28 +74,40 @@ void print_lval(lval v) {
 void println_lval(lval v) { print_lval(v); putchar('\n'); }
 
 // evaluate operator string to find operation to perform
-long eval_op(long x, char* op, long y) {
-  if (strcmp(op, "+") == 0) { return x + y; }
-  if (strcmp(op, "-") == 0) { return x - y; }
-  if (strcmp(op, "*") == 0) { return x * y; }
-  if (strcmp(op, "/") == 0) { return x / y; }
-  if (strcmp(op, "%") == 0) { return x % y; }
-  if (strcmp(op, "^") == 0) { return pow(x, y); } // bad because expects floating points?
-  return 0;
+lval eval_op(lval x, char* op, lval y) {
+
+  // check for errors
+  if (x.type == LVAL_ERR) { return x; }
+  if (y.type == LVAL_ERR) { return y; }
+  
+  if (strcmp(op, "+") == 0) { return lval_num(x.num + y.num); }
+  if (strcmp(op, "-") == 0) { return lval_num(x.num - y.num); }
+  if (strcmp(op, "*") == 0) { return lval_num(x.num * y.num); }
+  if (strcmp(op, "/") == 0) {
+    return y.num == 0 ? lval_err(LERR_DIV_ZERO) : lval_num(x.num / y.num);
+  }
+  if (strcmp(op, "%") == 0) {
+    return y.num == 0 ? lval_err(LERR_DIV_ZERO) : lval_num(x.num % y.num);
+  }
+  
+  //  if (strcmp(op, "^") == 0) { return pow(x, y); } // bad because expects floating points?
+  return lval_err(LERR_BAD_OP);
 }
 
-long eval(mpc_ast_t* t) {
+lval eval(mpc_ast_t* t) {
 
   // if tagged as number return it directly
+  // check for error in conversion
   if (strstr(t->tag, "number")) {
-    return atoi(t->contents);
+    errno = 0;
+    long x = strtol(t->contents, NULL, 10);
+    return errno != ERANGE ? lval_num(x) : lval_err(LERR_BAD_NUM);
   }
 
   // the operator is always the second child
   char* op = t->children[1]->contents;
-
   // store the third child in 'x'
-  long x = eval(t->children[2]);
+  lval x = eval(t->children[2]);
 
   //for (int i=0; i<t->children_num; i++)
   //  printf("%s\n", t->children[i]->tag);  
@@ -103,7 +115,7 @@ long eval(mpc_ast_t* t) {
 
   // handle negating single ints (e.g., - 2)
   if (!strstr(t->children[3]->tag, "expr")) {
-    if (strcmp(op, "-") == 0) { return -x; }
+    if (strcmp(op, "-") == 0) { return lval_num(-x.num); }
   }
   
   // iterate on remaining children
@@ -145,8 +157,9 @@ int main(int argc, char** argv) {
     // parse input
     mpc_result_t r;
     if (mpc_parse("<stdin", input, Lispy, &r)) {
-      long result = eval(r.output);
-      printf("%li\n", result);
+      lval result = eval(r.output);
+      println_lval(result);
+      //printf("%li\n", result);
       mpc_ast_delete(r.output);
     } else {
       mpc_err_print(r.error);
