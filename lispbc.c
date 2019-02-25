@@ -223,7 +223,7 @@ lval* builtin_op(lval* a, char* op) {
       x->num %= y->num;
     }
     if (strcmp(op, "^") == 0) {
-      return pow(x, y);
+      x->num = pow(x->num, y->num);
     } // bad because expects floating points?
 
     lval_del(y);
